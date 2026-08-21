@@ -1,10 +1,38 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+import Home from "./pages/Home";
+
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import CreateOrder from "./pages/admin/CreateOrder";
+
+import TechnicianDashboard from "./pages/technician/TechnicianDashboard";
+import CompleteJob from "./pages/technician/CompleteJob";
+
+import ManagerDashboard from "./pages/manager/ManagerDashboard";
+import AIQuery from "./pages/manager/AIQuery";
+
 function App() {
   return (
-    <div className="min-h-screen bg-blue-600 flex items-center justify-center">
-      <h1 className="text-4xl font-bold text-white">
-        Sejuk Sejuk Operations System
-      </h1>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/create-order" element={<CreateOrder />} />
+
+        <Route
+          path="/technician"
+          element={<TechnicianDashboard />}
+        />
+        <Route
+          path="/technician/complete-job"
+          element={<CompleteJob />}
+        />
+
+        <Route path="/manager" element={<ManagerDashboard />} />
+        <Route path="/manager/ai" element={<AIQuery />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
