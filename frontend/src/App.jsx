@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Home from "./pages/Home";
 
+import DashboardLayout from "./layouts/DashboardLayout";
+
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreateOrder from "./pages/admin/CreateOrder";
 
@@ -17,20 +19,38 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
 
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/create-order" element={<CreateOrder />} />
+        {/* Admin Routes */}
+        <Route element={<DashboardLayout role="admin" />}>
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route
+            path="/admin/create-order"
+            element={<CreateOrder />}
+          />
+        </Route>
 
-        <Route
-          path="/technician"
-          element={<TechnicianDashboard />}
-        />
-        <Route
-          path="/technician/complete-job"
-          element={<CompleteJob />}
-        />
+        {/* Technician Routes */}
+        <Route element={<DashboardLayout role="technician" />}>
+          <Route
+            path="/technician"
+            element={<TechnicianDashboard />}
+          />
+          <Route
+            path="/technician/complete-job"
+            element={<CompleteJob />}
+          />
+        </Route>
 
-        <Route path="/manager" element={<ManagerDashboard />} />
-        <Route path="/manager/ai" element={<AIQuery />} />
+        {/* Manager Routes */}
+        <Route element={<DashboardLayout role="manager" />}>
+          <Route
+            path="/manager"
+            element={<ManagerDashboard />}
+          />
+          <Route
+            path="/manager/ai"
+            element={<AIQuery />}
+          />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
