@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  ArrowRight,
+  BriefcaseBusiness,
   CheckCircle2,
   Upload,
   X,
   FileText,
+  MapPin,
+  UserRound,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
@@ -13,6 +17,11 @@ const MAX_FILES = 6;
 
 export default function CompleteJob() {
   const { id } = useParams();
+
+  return id ? <CompleteJobForm id={id} /> : <CompleteJobList />;
+}
+
+function CompleteJobForm({ id }) {
   const navigate = useNavigate();
 
   const [order, setOrder] = useState(null);
@@ -620,6 +629,123 @@ Sejuk Sejuk Operations`;
             : "Mark Job as Done"}
         </button>
       </form>
+    </div>
+  );
+}
+
+function CompleteJobList() {
+  const [technicians, setTechnicians] = useState([]);
+  const [selectedTechnician, setSelectedTechnician] = useState("");
+  const [orders, setOrders] = useState([]);
+  const [loadingTechnicians, setLoadingTechnicians] = useState(true);
+  const [loadingJobs, setLoadingJobs] = useState(false);
+
+  async function fetchTechnicians() {
+    setLoadingTechnicians(true);
+    const { data, error } = await supabase
+      .from("technicians")
+      .select("id, name")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching technicians:", error);
+      setTechnicians([]);
+    } else {
+      setTechnicians(data || []);
+      if (data?.length) setSelectedTechnician(data[0].id);
+    }
+
+    setLoadingTechnicians(false);
+  }
+
+  async function fetchJobs() {
+    setLoadingJobs(true);
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("assigned_technician_id", selectedTechnician)
+      .in("status", ["Assigned", "In Progress"])
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching jobs:", error);
+      setOrders([]);
+    } else {
+      setOrders(data || []);
+    }
+
+    setLoadingJobs(false);
+  }
+
+  useEffect(() => {
+    fetchTechnicians();
+  }, []);
+
+  useEffect(() => {
+    if (selectedTechnician) fetchJobs();
+    else setOrders([]);
+  }, [selectedTechnician]);
+
+  const technician = technicians.find((item) => item.id === selectedTechnician);
+  const loading = loadingTechnicians || loadingJobs;
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-blue-600">Job completion</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Choose a job to complete</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-500">Select a technician to see their active jobs, then record the completed service work.</p>
+        </div>
+        <div className="w-full sm:w-60">
+          <label htmlFor="completion-technician" className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700"><UserRound size={16} /> Technician</label>
+          <select id="completion-technician" value={selectedTechnician} onChange={(event) => setSelectedTechnician(event.target.value)} disabled={loadingTechnicians} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
+            {technicians.length === 0 ? <option value="">No technicians found</option> : technicians.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-5 sm:px-6">
+          <div>
+            <h2 className="font-bold text-slate-900">Active jobs</h2>
+            <p className="mt-1 text-sm text-slate-500">{technician ? `Available to complete for ${technician.name}.` : "Select a technician to continue."}</p>
+          </div>
+          {!loading && orders.length > 0 && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{orders.length} available</span>}
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-sm text-slate-500">Loading jobs…</div>
+        ) : technicians.length === 0 ? (
+          <CompletionEmptyState title="No technicians available" message="Add a technician before assigning or completing service orders." />
+        ) : orders.length === 0 ? (
+          <CompletionEmptyState title="No active jobs" message={`${technician?.name || "This technician"} does not have any assigned or in-progress jobs to complete.`} />
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {orders.map((order) => (
+              <Link key={order.id} to={`/technician/complete-job/${order.id}`} className="group flex flex-col gap-4 px-5 py-5 transition hover:bg-slate-50 sm:px-6 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-900">{order.order_number || order.id}</p><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{order.status}</span></div>
+                  <p className="mt-2 text-sm font-medium text-slate-700">{order.customer_name}</p>
+                  <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-500"><MapPin size={15} className="mt-0.5 shrink-0" />{order.address || "Address not provided"}</p>
+                  <p className="mt-2 text-xs font-medium uppercase tracking-wide text-slate-400">{order.service_type || "Service order"}</p>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-blue-600">Open completion form <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" /></span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CompletionEmptyState({ title, message }) {
+  return (
+    <div className="px-6 py-14 text-center">
+      <div className="mx-auto grid size-11 place-items-center rounded-full bg-slate-100 text-slate-500"><BriefcaseBusiness size={21} /></div>
+      <h3 className="mt-4 font-semibold text-slate-900">{title}</h3>
+      <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-slate-500">{message}</p>
     </div>
   );
 }

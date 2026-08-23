@@ -52,7 +52,7 @@ function App() {
 
           <Route
             path="/technician/complete-job"
-            element={<TechnicianDashboard />}
+            element={<CompleteJob />}
           />
 
         </Route>
