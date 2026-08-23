@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Send, Bot, Loader2, AlertCircle } from "lucide-react";
+import {
+  Send,
+  Bot,
+  Loader2,
+  AlertCircle,
+  Sparkles,
+} from "lucide-react";
 
 function AIQuery() {
   const [question, setQuestion] = useState("");
@@ -7,13 +13,39 @@ function AIQuery() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  const suggestedQuestions = [
+    {
+      label: "Completed Today",
+      question: "How many jobs were completed today?",
+    },
+    {
+      label: "Top Technician",
+      question:
+        "Which technician completed the most jobs this week?",
+    },
+    {
+      label: "Technician Jobs",
+      question:
+        "What jobs did Ali complete last week?",
+    },
+    {
+      label: "Workload Insight",
+      question:
+        "Which technician might be overloaded this week?",
+    },
+    {
+      label: "Workflow Review",
+      question:
+        "Are there any issues with completed jobs?",
+    },
+  ];
 
-    if (!question.trim()) {
+  async function askQuestion(selectedQuestion) {
+    if (!selectedQuestion.trim()) {
       return;
     }
 
+    setQuestion(selectedQuestion);
     setLoading(true);
     setError("");
     setAnswer(null);
@@ -27,7 +59,7 @@ function AIQuery() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            question: question,
+            question: selectedQuestion,
           }),
         }
       );
@@ -53,12 +85,19 @@ function AIQuery() {
     }
   }
 
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    await askQuestion(question);
+  }
+
   function useExampleQuestion(example) {
     setQuestion(example);
   }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+
       {/* Header */}
       <div>
         <h1 className="flex items-center gap-3 text-3xl font-bold text-gray-900">
@@ -68,18 +107,62 @@ function AIQuery() {
 
         <p className="mt-2 text-gray-600">
           Ask questions about service operations and technician
-          performance.
+          performance using controlled operational data.
         </p>
+      </div>
+
+      {/* Suggested Questions */}
+      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+
+        <div className="flex items-center gap-2">
+          <Sparkles
+            size={20}
+            className="text-blue-600"
+          />
+
+          <h2 className="font-semibold text-gray-900">
+            Suggested Questions
+          </h2>
+        </div>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Try one of the supported operational questions below.
+        </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {suggestedQuestions.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() =>
+                askQuestion(item.question)
+              }
+              disabled={loading}
+              className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-left transition hover:border-blue-400 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <p className="font-medium text-gray-900">
+                {item.label}
+              </p>
+
+              <p className="mt-1 text-sm text-gray-600">
+                {item.question}
+              </p>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Query Form */}
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+
         <form onSubmit={handleSubmit}>
+
           <label className="mb-2 block text-sm font-medium text-gray-700">
             Ask an operational question
           </label>
 
           <div className="flex flex-col gap-3 sm:flex-row">
+
             <input
               type="text"
               value={question}
@@ -111,22 +194,26 @@ function AIQuery() {
                 </>
               )}
             </button>
+
           </div>
         </form>
 
-        {/* Example Questions */}
+        {/* Manual Example Questions */}
         <div className="mt-6">
+
           <p className="mb-3 text-sm font-medium text-gray-700">
-            Try asking:
+            Quick examples:
           </p>
 
           <div className="flex flex-wrap gap-2">
+
             {[
               "How many jobs were completed today?",
               "Which technician completed the most jobs this week?",
               "What jobs did Ali complete last week?",
-              "How is the team's workload distributed this week?",
+              "Which technician might be overloaded this week?",
             ].map((example) => (
+
               <button
                 key={example}
                 type="button"
@@ -138,20 +225,25 @@ function AIQuery() {
               >
                 {example}
               </button>
+
             ))}
+
           </div>
         </div>
+
       </div>
 
       {/* Error */}
       {error && (
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-5 text-red-700">
+
           <AlertCircle
             size={22}
             className="mt-0.5 shrink-0"
           />
 
           <div>
+
             <p className="font-semibold">
               Unable to process question
             </p>
@@ -159,19 +251,24 @@ function AIQuery() {
             <p className="mt-1 text-sm">
               {error}
             </p>
+
           </div>
+
         </div>
       )}
 
       {/* AI Response */}
       {answer && (
         <div className="rounded-xl border border-blue-200 bg-white shadow-sm">
+
           <div className="flex items-center gap-3 border-b border-blue-100 bg-blue-50 p-5">
+
             <div className="rounded-lg bg-blue-600 p-2 text-white">
               <Bot size={20} />
             </div>
 
             <div>
+
               <h2 className="font-semibold text-gray-900">
                 AI Response
               </h2>
@@ -179,16 +276,22 @@ function AIQuery() {
               <p className="text-sm text-gray-500">
                 Based on retrieved operational data
               </p>
+
             </div>
+
           </div>
 
           <div className="p-6">
+
             <p className="whitespace-pre-wrap text-gray-700">
               {answer.answer}
             </p>
+
           </div>
+
         </div>
       )}
+
     </div>
   );
 }

@@ -431,6 +431,176 @@ def get_technician_workload_this_week():
         "technicians": workload_data,
     }
 
+@app.get("/api/workflow-supervisor")
+def workflow_supervisor():
+    return get_completed_job_issues()
+
+def get_completed_job_issues():
+    """
+    Controlled operation:
+    Review completed jobs and identify simple operational issues.
+
+    Only the required fields are retrieved.
+    All issue detection is performed by backend logic.
+    """
+
+    # Retrieve only completed jobs and the fields needed
+    completions_response = (
+        supabase
+        .table("job_completions")
+        .select(
+            """
+            order_id,
+            extra_charges,
+            final_amount,
+            payment_received,
+            payment_method,
+            orders (
+                id,
+                order_number,
+                quoted_price,
+                customer_name,
+                service_type,
+                status
+            )
+            """
+        )
+        .execute()
+    )
+
+    completions = completions_response.data
+
+    if not completions:
+        return {
+            "operation": "workflow_supervisor",
+            "reviewed_jobs": 0,
+            "jobs_with_issues": 0,
+            "issues": [],
+        }
+
+    issues = []
+
+    for completion in completions:
+        order = completion.get("orders")
+
+        if not order:
+            continue
+
+        order_id = completion.get("order_id")
+
+        job_issues = []
+
+        quoted_price = float(
+            order.get("quoted_price") or 0
+        )
+
+        final_amount = float(
+            completion.get("final_amount") or 0
+        )
+
+        payment_received = completion.get(
+            "payment_received"
+        )
+
+        # -------------------------------------------------
+        # CHECK 1:
+        # Final amount significantly higher than quoted price
+        # -------------------------------------------------
+
+        if quoted_price > 0:
+            increase_percentage = (
+                (final_amount - quoted_price)
+                / quoted_price
+            ) * 100
+
+            # Flag when final amount is at least 20% higher
+            if increase_percentage >= 20:
+                job_issues.append({
+                    "type": "high_final_amount",
+                    "message": (
+                        "Final amount is significantly higher "
+                        "than the quoted price."
+                    ),
+                    "quoted_price": quoted_price,
+                    "final_amount": final_amount,
+                    "increase_percentage": round(
+                        increase_percentage,
+                        2,
+                    ),
+                })
+
+        # -------------------------------------------------
+        # CHECK 2:
+        # Payment inconsistency
+        # -------------------------------------------------
+
+        if payment_received is not None:
+            payment_received = float(
+                payment_received
+            )
+
+            if payment_received > final_amount:
+                job_issues.append({
+                    "type": "payment_exceeds_final_amount",
+                    "message": (
+                        "Recorded payment is higher than the "
+                        "final job amount."
+                    ),
+                    "final_amount": final_amount,
+                    "payment_received": payment_received,
+                })
+
+        # -------------------------------------------------
+        # CHECK 3:
+        # Missing evidence files
+        # -------------------------------------------------
+
+        files_response = (
+            supabase
+            .table("job_files")
+            .select("id")
+            .eq("order_id", order_id)
+            .limit(1)
+            .execute()
+        )
+
+        has_files = len(files_response.data) > 0
+
+        if not has_files:
+            job_issues.append({
+                "type": "missing_job_evidence",
+                "message": (
+                    "Job was completed without uploaded "
+                    "evidence files."
+                ),
+            })
+
+        # -------------------------------------------------
+        # Add job only if issues were found
+        # -------------------------------------------------
+
+        if job_issues:
+            issues.append({
+                "order_id": order_id,
+                "order_number": order.get(
+                    "order_number"
+                ),
+                "customer_name": order.get(
+                    "customer_name"
+                ),
+                "service_type": order.get(
+                    "service_type"
+                ),
+                "issues": job_issues,
+            })
+
+    return {
+        "operation": "workflow_supervisor",
+        "reviewed_jobs": len(completions),
+        "jobs_with_issues": len(issues),
+        "issues": issues,
+    }
+
 @app.post("/api/ai/query")
 async def ai_query(request: AIQueryRequest):
 
@@ -445,10 +615,11 @@ async def ai_query(request: AIQueryRequest):
         return {
             "question": request.question,
             "answer": (
-                "I can currently answer questions about jobs "
-                "completed today, the technician with the most "
-                "completed jobs this week, and jobs completed by "
-                "a specific technician last week."
+                "I can currently help with completed job counts, "
+                "top technician performance, jobs completed by a "
+                "specific technician last week, technician workload "
+                "insights, and reviews of completed jobs for "
+                "operational issues."
             ),
             "operation": operation,
         }
@@ -481,6 +652,9 @@ async def ai_query(request: AIQueryRequest):
 
     elif operation == "technician_workload_this_week":
         data = get_technician_workload_this_week()
+
+    elif operation == "workflow_supervisor":
+        data = get_completed_job_issues() 
 
     else:
         return {
@@ -569,7 +743,23 @@ Examples:
 
 Do not extract a technician name.
 
-5. unsupported
+5. workflow_supervisor
+
+Use when the user asks to review completed jobs for operational
+issues, anomalies, payment inconsistencies, unusually high final
+amounts, or missing evidence.
+
+Examples:
+- Are there any issues with completed jobs?
+- Review completed jobs for problems.
+- Are there any workflow issues?
+- Do any completed jobs look suspicious?
+- Check for payment inconsistencies.
+- Are any completed jobs missing evidence files?
+
+Do not extract a technician name.
+
+6. unsupported
 
 Use this when the question does not clearly match one of the supported
 operations.
@@ -598,6 +788,10 @@ IMPORTANT RULES:
 - If the question does not clearly match a supported operation,
   choose unsupported.
 
+- Questions about reviewing completed jobs for issues, anomalies,
+  payment inconsistencies, unusually high amounts, or missing
+  evidence mean workflow_supervisor.
+
 Do not guess missing information.
 
 Return ONLY valid JSON.
@@ -605,7 +799,7 @@ Return ONLY valid JSON.
 Use exactly this structure:
 
 {{
-  "operation": "technician_completed_jobs_last_week | top_technician_this_week | completed_today | technician_workload_this_week | unsupported",
+  "operation": "technician_completed_jobs_last_week | top_technician_this_week | completed_today | technician_workload_this_week | workflow_supervisor | unsupported",
   "technician_name": "name or null"
 }}
 
@@ -632,6 +826,7 @@ User question:
             "top_technician_this_week",
             "completed_today",
             "technician_workload_this_week",
+            "workflow_supervisor",
             "unsupported",
         ]
 
@@ -672,45 +867,146 @@ User question:
     
 async def format_answer(question: str, data: dict):
     prompt = f"""
-You are an AI assistant for a service operations system.
+You are the response formatter for a service operations portal.
 
-Answer the manager's question using ONLY the structured data provided.
+Your role is to turn retrieved operational data into a clear,
+concise answer for a manager.
 
-STRICT RULES:
+You MUST use ONLY the data provided below.
 
-- Do not invent information.
-- Do not calculate new values that are not already provided.
-- Do not assume missing information.
-- Do not claim a technician is overloaded unless the retrieved
-  data explicitly identifies them as potentially_overloaded.
-- If a technician is listed as potentially_overloaded, describe this
-  as a potential workload concern, not a confirmed problem.
-- Compare completed_jobs with team_average when that information
-  is available.
-- If there is insufficient data, clearly explain that.
-- Do not mention database queries, APIs, Supabase, or internal
-  implementation.
-- Keep the answer concise and manager-friendly.
+STRICT GROUNDING RULES:
 
-For workload questions:
+- Do not invent names, job counts, dates, prices, orders,
+  technicians, customers, or conclusions.
+- Do not perform calculations that are not already present
+  in the retrieved data.
+- Do not add information that is missing from the data.
+- Do not assume a problem exists unless it is explicitly
+  identified in the retrieved data.
+- Do not claim a technician is overloaded unless they appear
+  in the "potentially_overloaded" data.
+- If the data contains no relevant results, clearly say so.
+- Do not mention databases, APIs, Supabase, backend logic,
+  JSON, retrieved data, or internal implementation.
 
-- Clearly mention the technician's completed job count.
-- Mention the team average when available.
-- If potentially_overloaded is empty, explain that no technician
-  currently exceeds the defined high-workload threshold.
-- Do not use stronger wording than the data supports.
+RESPONSE STYLE:
+
+- Answer the manager directly.
+- Keep the answer concise and easy to scan.
+- Prefer short paragraphs or bullet points when listing jobs
+  or issues.
+- Do not repeat the user's question.
+- Do not add unnecessary introductions such as
+  "Based on the data provided".
+- Do not speculate or give recommendations unless the retrieved
+  data explicitly supports them.
+
+OPERATION-SPECIFIC RULES:
+
+1. completed_today
+
+If count is greater than 0:
+
+"{{count}} jobs were completed today."
+
+If count is 0:
+
+"No jobs have been completed today."
+
+2. top_technician_this_week
+
+If there is no technician:
+
+"No jobs have been completed this week."
+
+Otherwise clearly state:
+
+"[Technician name] completed the most jobs this week with
+[X] completed jobs."
+
+Do not claim they are overloaded unless the question and
+retrieved data relate to workload.
+
+3. technician_completed_jobs_last_week
+
+If the technician was not found:
+
+"Technician [name] was not found."
+
+If the technician exists but count is 0:
+
+"[Technician name] did not complete any jobs during the
+previous calendar week."
+
+If jobs exist:
+
+Start with:
+
+"[Technician name] completed [X] jobs last week:"
+
+Then list each available job using:
+
+- Order number — Service type
+
+Only include customer information if it is available and useful.
+
+4. technician_workload_this_week
+
+Use only the workload information provided.
+
+If potentially_overloaded contains one or more technicians:
+
+Clearly state that they have a potential higher workload.
+
+Mention:
+
+- technician name
+- completed job count
+- team average
+
+Use cautious wording such as:
+
+"This may indicate a higher-than-average workload."
+
+Do not describe it as a confirmed problem.
+
+If potentially_overloaded is empty:
+
+State that no technician currently exceeds the defined
+high-workload threshold.
+
+You may mention the technician with the highest workload and
+the team average if available.
+
+5. workflow_supervisor
+
+If jobs_with_issues is 0:
+
+"No potential workflow issues were found in the reviewed jobs."
+
+If issues exist:
+
+Start with:
+
+"[X] completed jobs have potential issues."
+
+Then list each affected order and its detected issues.
+
+Only describe issues that are explicitly present.
+
+Do not add your own warnings or interpretations.
 
 User question:
 
 {question}
 
-Retrieved operational data:
+Operational data:
 
 {json.dumps(data, indent=2, default=str)}
 
-Write the final answer for the manager.
+Write only the final manager-facing answer.
 """
 
     response = await llm.ainvoke(prompt)
 
-    return response.content
+    return response.content.strip()
