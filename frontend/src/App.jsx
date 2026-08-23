@@ -16,6 +16,7 @@ import CompleteJob from "./pages/technician/CompleteJob";
 import ManagerDashboard from "./pages/manager/ManagerDashboard";
 import AIQuery from "./pages/manager/AIQuery";
 import ManagerJobDetails from "./pages/manager/ManagerJobDetails";
+import KPI from "./pages/manager/KPI";
 
 function App() {
   return (
@@ -45,6 +46,12 @@ function App() {
             path="/technician/complete-job/:id"
             element={<CompleteJob />}
           />
+
+          <Route
+            path="/technician/complete-job"
+            element={<TechnicianDashboard />}
+          />
+
         </Route>
 
         {/* Manager Routes */}
@@ -58,10 +65,17 @@ function App() {
             path="/manager/job/:id"
             element={<ManagerJobDetails />}
           />
+
           <Route
             path="/manager/ai"
             element={<AIQuery />}
           />
+
+          <Route
+            path="/manager/kpi"
+            element={<KPI />}
+          />
+
         </Route>
       </Routes>
     </BrowserRouter>

@@ -43,6 +43,11 @@ function DashboardLayout({ role }) {
       {
         name: "Dashboard",
         path: "/manager",
+        icon: LayoutDashboard,
+      },
+      {
+        name: "KPI Dashboard",
+        path: "/manager/kpi",
         icon: BarChart3,
       },
       {
