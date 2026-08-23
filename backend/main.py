@@ -296,6 +296,140 @@ def get_technician_completed_jobs_last_week(
         "count": len(completed_jobs),
         "completed_jobs": completed_jobs,
     }
+@app.get("/api/technician-workload-this-week")
+def get_technician_workload():
+    return get_technician_workload_this_week()
+
+def get_technician_workload_this_week():
+    """
+    Controlled operation:
+    Calculate completed jobs per technician this week
+    and identify potentially high workloads.
+
+    All workload calculations are performed by the backend.
+    The AI only explains the retrieved results.
+    """
+
+    now = datetime.now(timezone.utc)
+
+    # Start of current week (Monday)
+    start_of_week = (
+        now - timedelta(days=now.weekday())
+    ).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    end_of_week = start_of_week + timedelta(days=7)
+
+    # Retrieve only technician IDs for completed jobs
+    completions_response = (
+        supabase
+        .table("job_completions")
+        .select("technician_id")
+        .gte(
+            "completed_at",
+            start_of_week.isoformat(),
+        )
+        .lt(
+            "completed_at",
+            end_of_week.isoformat(),
+        )
+        .execute()
+    )
+
+    completions = completions_response.data
+
+    if not completions:
+        return {
+            "operation": "technician_workload_this_week",
+            "message": "No jobs have been completed this week.",
+            "total_completed_jobs": 0,
+            "active_technicians": 0,
+            "team_average": 0,
+            "highest_workload": None,
+            "potentially_overloaded": [],
+            "technicians": [],
+        }
+
+    # Count completed jobs for each technician
+    technician_counts = {}
+
+    for completion in completions:
+        technician_id = completion["technician_id"]
+
+        technician_counts[technician_id] = (
+            technician_counts.get(technician_id, 0) + 1
+        )
+
+    technician_ids = list(technician_counts.keys())
+
+    # Retrieve only the names of technicians involved
+    technicians_response = (
+        supabase
+        .table("technicians")
+        .select("id, name")
+        .in_("id", technician_ids)
+        .execute()
+    )
+
+    technicians = technicians_response.data
+
+    technician_names = {
+        technician["id"]: technician["name"]
+        for technician in technicians
+    }
+
+    workload_data = []
+
+    for technician_id, completed_jobs in technician_counts.items():
+        workload_data.append({
+            "technician_id": technician_id,
+            "technician_name": technician_names.get(
+                technician_id,
+                "Unknown Technician",
+            ),
+            "completed_jobs": completed_jobs,
+        })
+
+    # Highest workload first
+    workload_data.sort(
+        key=lambda technician: technician["completed_jobs"],
+        reverse=True,
+    )
+
+    total_completed_jobs = len(completions)
+    active_technicians = len(workload_data)
+
+    team_average = (
+        total_completed_jobs / active_technicians
+    )
+
+    # A technician is flagged when their workload is
+    # at least 50% above the team average.
+    overload_threshold = team_average * 1.5
+
+    potentially_overloaded = [
+        technician
+        for technician in workload_data
+        if technician["completed_jobs"] >= overload_threshold
+        and active_technicians > 1
+    ]
+
+    highest_workload = workload_data[0]
+
+    return {
+        "operation": "technician_workload_this_week",
+        "total_completed_jobs": total_completed_jobs,
+        "active_technicians": active_technicians,
+        "team_average": round(team_average, 2),
+        "overload_threshold": round(overload_threshold, 2),
+        "highest_workload": highest_workload,
+        "potentially_overloaded": potentially_overloaded,
+        "technicians": workload_data,
+    }
 
 @app.post("/api/ai/query")
 async def ai_query(request: AIQueryRequest):
@@ -304,44 +438,174 @@ async def ai_query(request: AIQueryRequest):
         request.question
     )
 
+    operation = interpretation["operation"]
+
+    # Unsupported question
+    if operation == "unsupported":
+        return {
+            "question": request.question,
+            "answer": (
+                "I can currently answer questions about jobs "
+                "completed today, the technician with the most "
+                "completed jobs this week, and jobs completed by "
+                "a specific technician last week."
+            ),
+            "operation": operation,
+        }
+
+    # Run the selected controlled operation
+    if operation == "completed_today":
+        data = get_completed_today()
+
+    elif operation == "top_technician_this_week":
+        data = get_top_technician_this_week()
+
+    elif operation == "technician_completed_jobs_last_week":
+        technician_name = interpretation.get(
+            "technician_name"
+        )    
+
+        if not technician_name:
+            return {
+                "question": request.question,
+                "answer": (
+                    "Please specify which technician you want "
+                    "to check."
+                ),
+                "operation": operation,
+            }
+
+        data = get_technician_completed_jobs_last_week(
+            technician_name
+        )
+
+    elif operation == "technician_workload_this_week":
+        data = get_technician_workload_this_week()
+
+    else:
+        return {
+            "question": request.question,
+            "answer": "I could not determine a supported operation.",
+            "operation": "unsupported",
+        }
+
+    # Let the AI format ONLY the retrieved structured data
+    answer = await format_answer(
+        request.question,
+        data,
+    )
+
     return {
         "question": request.question,
-        "interpretation": interpretation,
+        "answer": answer,
+        "operation": operation,
     }
 
 async def interpret_question(question: str):
     prompt = f"""
-You are an intent classifier for a service operations system.
+You are a strict intent classifier for a service operations system.
 
-Your job is to interpret the user's question and select ONLY one of
-the supported operations below.
+Your task is ONLY to determine which supported controlled operation
+matches the user's question.
 
-Supported operations:
+You do not have database access.
+You must not invent operations.
+You must not answer the user's question.
+You must only return classification JSON.
+
+SUPPORTED OPERATIONS:
 
 1. technician_completed_jobs_last_week
-   Use when the user asks what jobs a specific technician completed
-   during the previous calendar week.
+
+Use ONLY when the user asks about jobs completed by ONE specific
+technician during the PREVIOUS CALENDAR WEEK.
+
+Examples:
+- What jobs did Ali complete last week?
+- Show me the jobs Ali completed last week.
+- Which jobs were completed by Ali last week?
+- What work did technician Ali finish last week?
+
+Extract the technician's name.
 
 2. top_technician_this_week
-   Use when the user asks which technician completed the most jobs
-   during the current week.
+
+Use ONLY when the user asks which technician completed the MOST jobs
+during the CURRENT WEEK.
+
+Examples:
+- Which technician completed the most jobs this week?
+- Who completed the most jobs this week?
+- Who is the top technician this week?
+- Which technician completed the highest number of jobs this week?
+
+Do not extract a technician name.
 
 3. completed_today
-   Use when the user asks how many jobs were completed today.
 
-4. unsupported
-   Use when the question cannot be answered by the supported operations.
+Use ONLY when the user asks for the NUMBER of jobs completed TODAY.
 
-You do NOT have access to the database.
-You must NOT invent data.
-You are ONLY selecting which controlled operation should be used.
+Examples:
+- How many jobs were completed today?
+- How many completed jobs do we have today?
+- What is today's completed job count?
+- How many jobs did the team finish today?
+
+Do not extract a technician name.
+
+4. technician_workload_this_week
+
+Use when the user asks about technician workload,
+who is handling the most work, who may be overloaded,
+or which technician has an unusually high number of completed jobs
+during the CURRENT WEEK.
+
+Examples:
+- Which technician might be overloaded this week?
+- Who has the highest workload this week?
+- Which technician is handling the most jobs this week?
+- Is anyone overloaded this week?
+- Who appears to have the heaviest workload this week?
+
+Do not extract a technician name.
+
+5. unsupported
+
+Use this when the question does not clearly match one of the supported
+operations.
+
+Examples:
+- What jobs did Ali complete this month?
+- How much money did we make today?
+- Show me all jobs.
+- What jobs did Ali complete?
+
+IMPORTANT RULES:
+
+- "last week" + a specific technician's completed jobs means
+  technician_completed_jobs_last_week.
+
+- "most completed jobs this week" means
+  top_technician_this_week.
+
+- Questions about workload, being busy, overloaded, heaviest workload,
+  or handling the most work this week mean
+  technician_workload_this_week.
+
+- "today" means completed_today ONLY when the user asks for
+  the number or count of completed jobs.
+
+- If the question does not clearly match a supported operation,
+  choose unsupported.
+
+Do not guess missing information.
 
 Return ONLY valid JSON.
 
 Use exactly this structure:
 
 {{
-  "operation": "technician_completed_jobs_last_week | top_technician_this_week | completed_today | unsupported",
+  "operation": "technician_completed_jobs_last_week | top_technician_this_week | completed_today | technician_workload_this_week | unsupported",
   "technician_name": "name or null"
 }}
 
@@ -352,29 +616,101 @@ User question:
 
     response = await llm.ainvoke(prompt)
 
+    content = response.content.strip()
+
+    # Remove Markdown code fences if returned
+    if content.startswith("```"):
+        content = content.replace("```json", "")
+        content = content.replace("```", "")
+        content = content.strip()
+
     try:
-        result = json.loads(response.content)
+        result = json.loads(content)
 
         allowed_operations = [
             "technician_completed_jobs_last_week",
             "top_technician_this_week",
             "completed_today",
+            "technician_workload_this_week",
             "unsupported",
         ]
 
-        if result.get("operation") not in allowed_operations:
+        operation = result.get("operation")
+
+        if operation not in allowed_operations:
             return {
                 "operation": "unsupported",
                 "technician_name": None,
             }
 
+        technician_name = result.get("technician_name")
+
+        # Only this operation is allowed to have a technician name
+        if operation != "technician_completed_jobs_last_week":
+            technician_name = None
+
+        if technician_name:
+            technician_name = str(technician_name).strip()
+
+            if not technician_name:
+                technician_name = None
+
         return {
-            "operation": result.get("operation"),
-            "technician_name": result.get("technician_name"),
+            "operation": operation,
+            "technician_name": technician_name,
         }
 
-    except (json.JSONDecodeError, TypeError):
+    except (
+        json.JSONDecodeError,
+        TypeError,
+        AttributeError,
+    ):
         return {
             "operation": "unsupported",
             "technician_name": None,
         }
+    
+async def format_answer(question: str, data: dict):
+    prompt = f"""
+You are an AI assistant for a service operations system.
+
+Answer the manager's question using ONLY the structured data provided.
+
+STRICT RULES:
+
+- Do not invent information.
+- Do not calculate new values that are not already provided.
+- Do not assume missing information.
+- Do not claim a technician is overloaded unless the retrieved
+  data explicitly identifies them as potentially_overloaded.
+- If a technician is listed as potentially_overloaded, describe this
+  as a potential workload concern, not a confirmed problem.
+- Compare completed_jobs with team_average when that information
+  is available.
+- If there is insufficient data, clearly explain that.
+- Do not mention database queries, APIs, Supabase, or internal
+  implementation.
+- Keep the answer concise and manager-friendly.
+
+For workload questions:
+
+- Clearly mention the technician's completed job count.
+- Mention the team average when available.
+- If potentially_overloaded is empty, explain that no technician
+  currently exceeds the defined high-workload threshold.
+- Do not use stronger wording than the data supports.
+
+User question:
+
+{question}
+
+Retrieved operational data:
+
+{json.dumps(data, indent=2, default=str)}
+
+Write the final answer for the manager.
+"""
+
+    response = await llm.ainvoke(prompt)
+
+    return response.content
