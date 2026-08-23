@@ -37,7 +37,12 @@ export default function CompleteJob() {
 
     const { data, error } = await supabase
       .from("orders")
-      .select("*")
+      .select(`
+        *,
+        technicians (
+          name
+        )
+      `)
       .eq("id", id)
       .single();
 
@@ -183,41 +188,51 @@ export default function CompleteJob() {
 
   function openWhatsAppNotification() {
     if (!order?.phone) {
-      console.warn("Customer phone number is missing.");
+      console.warn(
+        "Customer phone number is missing."
+      );
+
       return;
     }
 
     // Remove spaces, +, -, brackets, etc.
-    let phone = order.phone.replace(/\D/g, "");
+    let phone = order.phone.replace(
+      /\D/g,
+      ""
+    );
 
-    // Convert Malaysian local format:
+    // Convert Malaysian local phone number:
     // 0123456789 -> 60123456789
     if (phone.startsWith("0")) {
       phone = `60${phone.substring(1)}`;
     }
 
     const technicianName =
-      order.assigned_technician_name || "Technician";
+      order.technicians?.name ||
+      "Technician";
 
-    const completedTime = new Date().toLocaleString(
-      "en-MY",
-      {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }
-    );
+    const completedTime =
+      new Date().toLocaleString(
+        "en-MY",
+        {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }
+      );
 
     const message = `Hi ${order.customer_name},
 
-  Your service job ${order.order_number} has been completed by Technician ${technicianName} at ${completedTime}.
+Job ${order.order_number} has been completed by Technician ${technicianName} at ${completedTime}.
 
-  Please check the completed service and leave your feedback.
+Please check the completed service and leave feedback.
 
-  Thank you!
-  Sejuk Sejuk Operations`;
+Thank you!
+Sejuk Sejuk Operations`;
 
     const whatsappUrl =
-      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+      `https://wa.me/${phone}?text=${encodeURIComponent(
+        message
+      )}`;
 
     window.open(
       whatsappUrl,
@@ -273,7 +288,12 @@ export default function CompleteJob() {
         throw orderError;
       }
 
-      alert("Job completed successfully.");
+      // Step 5: Trigger WhatsApp notification
+      openWhatsAppNotification();
+
+      alert(
+        "Job completed successfully. WhatsApp notification prepared."
+      );
 
       navigate("/technician");
     } catch (error) {
