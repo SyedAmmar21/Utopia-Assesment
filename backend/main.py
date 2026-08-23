@@ -431,6 +431,407 @@ def get_technician_workload_this_week():
         "technicians": workload_data,
     }
 
+# ==========================================
+# KPI DASHBOARD - WEEKLY TECHNICIAN PERFORMANCE
+# ==========================================
+
+@app.get("/api/kpi/technician-performance-this-week")
+def get_technician_performance_this_week():
+    """
+    KPI operation:
+    Calculate weekly technician performance.
+
+    Metrics:
+    - Jobs completed
+    - Total completed job amount
+    - Postpone / reschedule activity
+    - Technician ranking
+
+    All calculations are performed by backend logic.
+    """
+
+    now = datetime.now(timezone.utc)
+
+    # Start of the current week (Monday)
+    start_of_week = (
+        now - timedelta(days=now.weekday())
+    ).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    end_of_week = (
+        start_of_week
+        + timedelta(days=7)
+    )
+
+    # ------------------------------------------
+    # STEP 1:
+    # Retrieve completed jobs for the current week
+    # ------------------------------------------
+
+    completions_response = (
+        supabase
+        .table("job_completions")
+        .select(
+            """
+            technician_id,
+            final_amount,
+            completed_at,
+            technicians (
+                id,
+                name,
+                branch
+            )
+            """
+        )
+        .gte(
+            "completed_at",
+            start_of_week.isoformat(),
+        )
+        .lt(
+            "completed_at",
+            end_of_week.isoformat(),
+        )
+        .execute()
+    )
+
+    completions = completions_response.data or []
+
+    # ------------------------------------------
+    # STEP 2:
+    # Retrieve weekly order activity
+    #
+    # We retrieve the order's assigned technician
+    # so postpone/reschedule activity can be
+    # associated with a technician.
+    # ------------------------------------------
+
+    activity_response = (
+        supabase
+        .table("order_activity")
+        .select(
+            """
+            action,
+            details,
+            created_at,
+            orders (
+                assigned_technician_id
+            )
+            """
+        )
+        .gte(
+            "created_at",
+            start_of_week.isoformat(),
+        )
+        .lt(
+            "created_at",
+            end_of_week.isoformat(),
+        )
+        .execute()
+    )
+
+    activities = activity_response.data or []
+
+    # ------------------------------------------
+    # STEP 3:
+    # Create performance records
+    # from completed jobs
+    # ------------------------------------------
+
+    technician_performance = {}
+
+    for completion in completions:
+
+        technician_id = completion.get(
+            "technician_id"
+        )
+
+        if not technician_id:
+            continue
+
+        technician = completion.get(
+            "technicians"
+        ) or {}
+
+        if technician_id not in technician_performance:
+
+            technician_performance[
+                technician_id
+            ] = {
+                "technician_id": technician_id,
+                "name": technician.get(
+                    "name",
+                    "Unknown Technician",
+                ),
+                "branch": technician.get(
+                    "branch"
+                ),
+                "jobs_completed": 0,
+                "total_amount": 0,
+                "postpone_reschedule_count": 0,
+            }
+
+        technician_performance[
+            technician_id
+        ]["jobs_completed"] += 1
+
+        technician_performance[
+            technician_id
+        ]["total_amount"] += float(
+            completion.get("final_amount") or 0
+        )
+
+    # ------------------------------------------
+    # STEP 4:
+    # Detect postpone / reschedule activity
+    #
+    # Current records do not contain these actions,
+    # so this will currently return 0.
+    #
+    # It supports future activity text such as:
+    # "Order postponed"
+    # "Job rescheduled"
+    # etc.
+    # ------------------------------------------
+
+    postpone_reschedule_total = 0
+
+    for activity in activities:
+
+        action = (
+            activity.get("action") or ""
+        ).lower()
+
+        details = (
+            activity.get("details") or ""
+        ).lower()
+
+        activity_text = (
+            action
+            + " "
+            + details
+        )
+
+        is_postpone_or_reschedule = any(
+            keyword in activity_text
+            for keyword in [
+                "postpone",
+                "postponed",
+                "reschedule",
+                "rescheduled",
+            ]
+        )
+
+        if not is_postpone_or_reschedule:
+            continue
+
+        # Count the event globally
+        postpone_reschedule_total += 1
+
+        # Retrieve the technician assigned
+        # to the related order
+        order = activity.get("orders") or {}
+
+        technician_id = order.get(
+            "assigned_technician_id"
+        )
+
+        # If no technician is assigned,
+        # keep the event in the overall total
+        # but do not assign it to a technician.
+        if not technician_id:
+            continue
+
+        # If this technician does not already
+        # exist from completed jobs, create
+        # a placeholder record for now.
+        if technician_id not in technician_performance:
+
+            technician_performance[
+                technician_id
+            ] = {
+                "technician_id": technician_id,
+                "name": "Unknown Technician",
+                "branch": None,
+                "jobs_completed": 0,
+                "total_amount": 0,
+                "postpone_reschedule_count": 0,
+            }
+
+        technician_performance[
+            technician_id
+        ]["postpone_reschedule_count"] += 1
+
+    # ------------------------------------------
+    # STEP 5:
+    # Get proper technician information for
+    # any technician created from activity only
+    # ------------------------------------------
+
+    technician_ids = list(
+        technician_performance.keys()
+    )
+
+    if technician_ids:
+
+        technicians_response = (
+            supabase
+            .table("technicians")
+            .select(
+                "id, name, branch"
+            )
+            .in_(
+                "id",
+                technician_ids,
+            )
+            .execute()
+        )
+
+        technicians_data = (
+            technicians_response.data
+            or []
+        )
+
+        technician_lookup = {
+            technician["id"]: technician
+            for technician in technicians_data
+        }
+
+        for technician_id, performance in (
+            technician_performance.items()
+        ):
+
+            technician = technician_lookup.get(
+                technician_id
+            )
+
+            if technician:
+
+                performance["name"] = (
+                    technician.get(
+                        "name",
+                        performance["name"],
+                    )
+                )
+
+                performance["branch"] = (
+                    technician.get(
+                        "branch"
+                    )
+                )
+
+    # ------------------------------------------
+    # STEP 6:
+    # Convert to list and round amounts
+    # ------------------------------------------
+
+    technicians = list(
+        technician_performance.values()
+    )
+
+    for technician in technicians:
+
+        technician["total_amount"] = round(
+            technician["total_amount"],
+            2,
+        )
+
+    # ------------------------------------------
+    # STEP 7:
+    # Rank technicians
+    #
+    # Primary: jobs completed
+    # Secondary: total amount
+    # ------------------------------------------
+
+    technicians.sort(
+        key=lambda technician: (
+            technician["jobs_completed"],
+            technician["total_amount"],
+        ),
+        reverse=True,
+    )
+
+    for index, technician in enumerate(
+        technicians
+    ):
+
+        technician["rank"] = index + 1
+
+    # ------------------------------------------
+    # STEP 8:
+    # Calculate overall KPI summary
+    # ------------------------------------------
+
+    total_jobs_completed = sum(
+        technician["jobs_completed"]
+        for technician in technicians
+    )
+
+    total_amount = round(
+        sum(
+            technician["total_amount"]
+            for technician in technicians
+        ),
+        2,
+    )
+
+    active_technicians = len(
+        technicians
+    )
+
+    top_technician = (
+        technicians[0]
+        if technicians
+        else None
+    )
+
+    # ------------------------------------------
+    # FINAL KPI RESPONSE
+    # ------------------------------------------
+
+    return {
+        "operation": (
+            "technician_kpi_this_week"
+        ),
+
+        "period": {
+            "start": (
+                start_of_week.isoformat()
+            ),
+            "end": (
+                end_of_week.isoformat()
+            ),
+        },
+
+        "summary": {
+            "total_jobs_completed": (
+                total_jobs_completed
+            ),
+
+            "total_amount": (
+                total_amount
+            ),
+
+            "active_technicians": (
+                active_technicians
+            ),
+
+            "postpone_reschedule_count": (
+                postpone_reschedule_total
+            ),
+
+            "top_technician": (
+                top_technician
+            ),
+        },
+
+        "technicians": technicians,
+    }
+
 @app.get("/api/workflow-supervisor")
 def workflow_supervisor():
     return get_completed_job_issues()
@@ -599,6 +1000,28 @@ def get_completed_job_issues():
         "reviewed_jobs": len(completions),
         "jobs_with_issues": len(issues),
         "issues": issues,
+    }
+
+@app.get("/api/test-order-activity")
+def test_order_activity():
+
+    response = (
+        supabase
+        .table("order_activity")
+        .select(
+            "action, old_status, new_status, details, created_at"
+        )
+        .order(
+            "created_at",
+            desc=True,
+        )
+        .limit(20)
+        .execute()
+    )
+
+    return {
+        "count": len(response.data),
+        "activity": response.data,
     }
 
 @app.post("/api/ai/query")
