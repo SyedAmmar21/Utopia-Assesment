@@ -162,6 +162,7 @@ export default function AdminDashboard() {
                   <th className="px-5 py-3">Service</th>
                   <th className="px-5 py-3">Technician</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Action</th>
                 </tr>
               </thead>
 
@@ -191,6 +192,15 @@ export default function AdminDashboard() {
                       <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
                         {order.status}
                       </span>
+                    </td>
+
+                    <td className="px-5 py-4 text-right">
+                      <Link
+                        to={`/admin/orders/${order.id}`}
+                        className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                      >
+                        View
+                      </Link>
                     </td>
                   </tr>
                 ))}

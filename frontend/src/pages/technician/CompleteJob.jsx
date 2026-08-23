@@ -181,6 +181,51 @@ export default function CompleteJob() {
     }
   }
 
+  function openWhatsAppNotification() {
+    if (!order?.phone) {
+      console.warn("Customer phone number is missing.");
+      return;
+    }
+
+    // Remove spaces, +, -, brackets, etc.
+    let phone = order.phone.replace(/\D/g, "");
+
+    // Convert Malaysian local format:
+    // 0123456789 -> 60123456789
+    if (phone.startsWith("0")) {
+      phone = `60${phone.substring(1)}`;
+    }
+
+    const technicianName =
+      order.assigned_technician_name || "Technician";
+
+    const completedTime = new Date().toLocaleString(
+      "en-MY",
+      {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }
+    );
+
+    const message = `Hi ${order.customer_name},
+
+  Your service job ${order.order_number} has been completed by Technician ${technicianName} at ${completedTime}.
+
+  Please check the completed service and leave your feedback.
+
+  Thank you!
+  Sejuk Sejuk Operations`;
+
+    const whatsappUrl =
+      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+
+    window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
 

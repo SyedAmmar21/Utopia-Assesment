@@ -24,6 +24,11 @@ function DashboardLayout({ role }) {
         path: "/admin/create-order",
         icon: PlusCircle,
       },
+      {
+        name: "Orders",
+        path: "/admin/orders",
+        icon: ClipboardList,
+      },
     ],
 
     technician: [

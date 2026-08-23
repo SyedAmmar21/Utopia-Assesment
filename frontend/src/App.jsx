@@ -7,6 +7,8 @@ import DashboardLayout from "./layouts/DashboardLayout";
 // Admin
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreateOrder from "./pages/admin/CreateOrder";
+import AdminOrders from "./pages/admin/AdminOrders";
+import OrderDetails from "./pages/admin/OrderDetails";
 
 // Technician
 import TechnicianDashboard from "./pages/technician/TechnicianDashboard";
@@ -26,13 +28,14 @@ function App() {
         <Route path="/" element={<Home />} />
 
         {/* Admin Routes */}
-        <Route element={<DashboardLayout role="admin" />}>
-          <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin" element={<DashboardLayout role="admin" />}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="create-order" element={<CreateOrder />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="orders/:id" element={<OrderDetails />} />
 
-          <Route
-            path="/admin/create-order"
-            element={<CreateOrder />}
-          />
+          {/* Preserves the existing order-details URL. */}
+          <Route path="order/:id" element={<OrderDetails />} />
         </Route>
 
         {/* Technician Routes */}
