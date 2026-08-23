@@ -1,44 +1,87 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ClipboardList, Clock, Wrench, CheckCircle2 } from "lucide-react";
+import {
+  ClipboardList,
+  Clock,
+  Wrench,
+  CheckCircle2,
+} from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
-const technicians = [
-  {
-    id: "0bdbae42-4add-4921-8d05-272f84cd00c5",
-    name: "Ali",
-  },
-];
-
 export default function TechnicianDashboard() {
-  const [selectedTechnician, setSelectedTechnician] = useState(
-  technicians[0].id
-);
+  const [technicians, setTechnicians] = useState([]);
+  const [selectedTechnician, setSelectedTechnician] =
+    useState("");
 
   const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingTechnicians, setLoadingTechnicians] =
+    useState(true);
+  const [loadingJobs, setLoadingJobs] = useState(false);
 
+  // Load all technicians
   useEffect(() => {
-    fetchAssignedJobs();
+    fetchTechnicians();
+  }, []);
+
+  // Load jobs when technician changes
+  useEffect(() => {
+    if (selectedTechnician) {
+      fetchAssignedJobs();
+    }
   }, [selectedTechnician]);
 
+  async function fetchTechnicians() {
+    setLoadingTechnicians(true);
+
+    const { data, error } = await supabase
+      .from("technicians")
+      .select("id, name")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error(
+        "Error fetching technicians:",
+        error
+      );
+
+      setTechnicians([]);
+    } else {
+      setTechnicians(data || []);
+
+      // Automatically select the first technician
+      if (data && data.length > 0) {
+        setSelectedTechnician(data[0].id);
+      }
+    }
+
+    setLoadingTechnicians(false);
+  }
+
   async function fetchAssignedJobs() {
-    setLoading(true);
+    setLoadingJobs(true);
 
     const { data, error } = await supabase
       .from("orders")
       .select("*")
-      .eq("assigned_technician_id", selectedTechnician)
+      .eq(
+        "assigned_technician_id",
+        selectedTechnician
+      )
       .in("status", ["Assigned", "In Progress"])
       .order("created_at", { ascending: false });
+
     if (error) {
-      console.error("Error fetching technician jobs:", error);
+      console.error(
+        "Error fetching technician jobs:",
+        error
+      );
+
       setOrders([]);
     } else {
       setOrders(data || []);
     }
 
-    setLoading(false);
+    setLoadingJobs(false);
   }
 
   const assignedCount = orders.filter(
@@ -48,6 +91,11 @@ export default function TechnicianDashboard() {
   const inProgressCount = orders.filter(
     (order) => order.status === "In Progress"
   ).length;
+
+  const selectedTechnicianData = technicians.find(
+    (technician) =>
+      technician.id === selectedTechnician
+  );
 
   const stats = [
     {
@@ -67,6 +115,9 @@ export default function TechnicianDashboard() {
     },
   ];
 
+  const loading =
+    loadingTechnicians || loadingJobs;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -77,10 +128,11 @@ export default function TechnicianDashboard() {
           </h1>
 
           <p className="text-sm text-gray-500">
-            View and complete your assigned service jobs.
+            View and complete assigned service jobs.
           </p>
         </div>
 
+        {/* Technician Selector */}
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
             Viewing as
@@ -88,18 +140,31 @@ export default function TechnicianDashboard() {
 
           <select
             value={selectedTechnician}
-            onChange={(e) => setSelectedTechnician(e.target.value)}
+            onChange={(e) =>
+              setSelectedTechnician(e.target.value)
+            }
+            disabled={loadingTechnicians}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
           >
-            {technicians.map((technician) => (
-              <option key={technician.id} value={technician.id}>
-                {technician.name}
+            {technicians.length === 0 ? (
+              <option value="">
+                No technicians found
               </option>
-            ))}
+            ) : (
+              technicians.map((technician) => (
+                <option
+                  key={technician.id}
+                  value={technician.id}
+                >
+                  {technician.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Statistics */}
       <div className="grid gap-4 sm:grid-cols-3">
         {stats.map((stat) => {
           const Icon = stat.icon;
@@ -138,9 +203,7 @@ export default function TechnicianDashboard() {
 
           <p className="text-sm text-gray-500">
             Jobs currently assigned to{" "}
-            {technicians.find(
-              (technician) => technician.id === selectedTechnician
-            )?.name}.
+            {selectedTechnicianData?.name || "technician"}.
           </p>
         </div>
 
@@ -148,9 +211,14 @@ export default function TechnicianDashboard() {
           <div className="p-8 text-center text-gray-500">
             Loading jobs...
           </div>
+        ) : technicians.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            No technicians found.
+          </div>
         ) : orders.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No active jobs assigned to {technicians.find((technician) => technician.id === selectedTechnician)?.name}.
+            No active jobs assigned to{" "}
+            {selectedTechnicianData?.name}.
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
