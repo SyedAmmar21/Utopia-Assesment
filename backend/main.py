@@ -1,24 +1,42 @@
 import os
+import json
+
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from supabase import create_client
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
     raise ValueError(
         "Missing SUPABASE_URL or SUPABASE_SECRET_KEY in .env"
     )
 
+if not OPENAI_API_KEY:
+    raise ValueError(
+        "Missing OPENAI_API_KEY in .env"
+    )
+
 supabase = create_client(
     SUPABASE_URL,
     SUPABASE_SECRET_KEY,
 )
+
+llm = ChatOpenAI(
+    model="gpt-5.4-mini",
+    temperature=0,
+)
+
+class AIQueryRequest(BaseModel):
+    question: str
 
 app = FastAPI(
     title="Utopia Operations AI Backend"
@@ -278,3 +296,85 @@ def get_technician_completed_jobs_last_week(
         "count": len(completed_jobs),
         "completed_jobs": completed_jobs,
     }
+
+@app.post("/api/ai/query")
+async def ai_query(request: AIQueryRequest):
+
+    interpretation = await interpret_question(
+        request.question
+    )
+
+    return {
+        "question": request.question,
+        "interpretation": interpretation,
+    }
+
+async def interpret_question(question: str):
+    prompt = f"""
+You are an intent classifier for a service operations system.
+
+Your job is to interpret the user's question and select ONLY one of
+the supported operations below.
+
+Supported operations:
+
+1. technician_completed_jobs_last_week
+   Use when the user asks what jobs a specific technician completed
+   during the previous calendar week.
+
+2. top_technician_this_week
+   Use when the user asks which technician completed the most jobs
+   during the current week.
+
+3. completed_today
+   Use when the user asks how many jobs were completed today.
+
+4. unsupported
+   Use when the question cannot be answered by the supported operations.
+
+You do NOT have access to the database.
+You must NOT invent data.
+You are ONLY selecting which controlled operation should be used.
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
+
+{{
+  "operation": "technician_completed_jobs_last_week | top_technician_this_week | completed_today | unsupported",
+  "technician_name": "name or null"
+}}
+
+User question:
+
+{question}
+"""
+
+    response = await llm.ainvoke(prompt)
+
+    try:
+        result = json.loads(response.content)
+
+        allowed_operations = [
+            "technician_completed_jobs_last_week",
+            "top_technician_this_week",
+            "completed_today",
+            "unsupported",
+        ]
+
+        if result.get("operation") not in allowed_operations:
+            return {
+                "operation": "unsupported",
+                "technician_name": None,
+            }
+
+        return {
+            "operation": result.get("operation"),
+            "technician_name": result.get("technician_name"),
+        }
+
+    except (json.JSONDecodeError, TypeError):
+        return {
+            "operation": "unsupported",
+            "technician_name": None,
+        }
