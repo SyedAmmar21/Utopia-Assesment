@@ -22,7 +22,13 @@ export default function AdminDashboard() {
 
     const { data, error } = await supabase
       .from("orders")
-      .select("*")
+      .select(`
+        *,
+        technicians (
+          id,
+          name
+        )
+      `)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -161,7 +167,10 @@ export default function AdminDashboard() {
 
               <tbody className="divide-y divide-gray-200">
                 {orders.slice(0, 8).map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
+                  <tr
+                    key={order.id}
+                    className="hover:bg-gray-50"
+                  >
                     <td className="px-5 py-4 font-medium text-gray-900">
                       {order.order_number || order.id}
                     </td>
@@ -175,7 +184,7 @@ export default function AdminDashboard() {
                     </td>
 
                     <td className="px-5 py-4 text-gray-600">
-                      {order.assigned_technician || "Unassigned"}
+                      {order.technicians?.name || "Unassigned"}
                     </td>
 
                     <td className="px-5 py-4">

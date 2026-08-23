@@ -4,24 +4,30 @@ import Home from "./pages/Home";
 
 import DashboardLayout from "./layouts/DashboardLayout";
 
+// Admin
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreateOrder from "./pages/admin/CreateOrder";
 
+// Technician
 import TechnicianDashboard from "./pages/technician/TechnicianDashboard";
 import CompleteJob from "./pages/technician/CompleteJob";
 
+// Manager
 import ManagerDashboard from "./pages/manager/ManagerDashboard";
 import AIQuery from "./pages/manager/AIQuery";
+import ManagerJobDetails from "./pages/manager/ManagerJobDetails";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Home */}
         <Route path="/" element={<Home />} />
 
         {/* Admin Routes */}
         <Route element={<DashboardLayout role="admin" />}>
           <Route path="/admin" element={<AdminDashboard />} />
+
           <Route
             path="/admin/create-order"
             element={<CreateOrder />}
@@ -34,8 +40,9 @@ function App() {
             path="/technician"
             element={<TechnicianDashboard />}
           />
+
           <Route
-            path="/technician/complete-job"
+            path="/technician/complete-job/:id"
             element={<CompleteJob />}
           />
         </Route>
@@ -45,6 +52,11 @@ function App() {
           <Route
             path="/manager"
             element={<ManagerDashboard />}
+          />
+
+          <Route
+            path="/manager/job/:id"
+            element={<ManagerJobDetails />}
           />
           <Route
             path="/manager/ai"
