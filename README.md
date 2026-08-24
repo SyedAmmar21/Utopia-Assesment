@@ -4,9 +4,11 @@ A full-stack internal operations system built for the **Sejuk Sejuk Service Sdn 
 
 ## Live Demo
 
-- Frontend: [Sejuk Sejuk Operations System](https://utopia-assesment-cegpqptsy-syed-ammar.vercel.app)
-- Backend API: [FastAPI service](https://utopia-assessment-backend.onrender.com)
-- API documentation: [Swagger UI](https://utopia-assessment-backend.onrender.com/docs)
+The frontend is deployed on Vercel and the FastAPI backend is deployed on Render.
+
+- Vercel frontend: [Open the live Sejuk Sejuk Operations System](https://utopia-assesment-cegpqptsy-syed-ammar.vercel.app)
+- Render backend API: [Open the deployed FastAPI service](https://utopia-assessment-backend.onrender.com)
+- Render API documentation: [Open Swagger UI](https://utopia-assessment-backend.onrender.com/docs)
 
 ## Project Overview
 
