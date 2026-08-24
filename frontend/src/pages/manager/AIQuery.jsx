@@ -52,7 +52,7 @@ function AIQuery() {
 
     try {
       const response = await fetch(
-        "http://localhost:8000/api/ai/query",
+        "https://utopia-assessment-backend.onrender.com/api/ai/query",
         {
           method: "POST",
           headers: {

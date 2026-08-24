@@ -21,7 +21,7 @@ function KPI() {
         setError("");
 
         const response = await fetch(
-          "http://localhost:8000/api/kpi/technician-performance-this-week"
+          "https://utopia-assessment-backend.onrender.com/api/kpi/technician-performance-this-week"
         );
 
         const data = await response.json();
