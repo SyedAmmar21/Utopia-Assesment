@@ -1,4 +1,4 @@
-# Sejuk Sejuk Operations System
+# Sejuk Service Operations System
 
 A full-stack internal operations system built for **Sejuk Service Sdn Bhd**, a fictional company made for learning and situation setup. It digitises the flow of air-conditioner service jobs from order creation and technician assignment through job completion, evidence capture, operational review, KPI reporting, and controlled AI-assisted queries.
 
