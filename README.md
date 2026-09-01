@@ -1,6 +1,6 @@
 # Sejuk Sejuk Operations System
 
-A full-stack internal operations system built for the **Sejuk Sejuk Service Sdn Bhd** programmer assessment. It digitises the flow of air-conditioner service jobs from order creation and technician assignment through job completion, evidence capture, operational review, KPI reporting, and controlled AI-assisted queries.
+A full-stack internal operations system built for **Sejuk Service Sdn Bhd**, a fictional company made for learning and situation setup. It digitises the flow of air-conditioner service jobs from order creation and technician assignment through job completion, evidence capture, operational review, KPI reporting, and controlled AI-assisted queries.
 
 ## Live Demo
 
@@ -195,18 +195,6 @@ The client validates images, videos, and PDF files before upload. The admin and 
 
 The code supports postpone/reschedule detection by matching those words in `order_activity` records. The currently created activity record is an order-creation record, so this metric remains zero unless corresponding activity is recorded.
 
-## Challenges and Assumptions
-
-### Challenges
-
-- Learning new tools and languages, getting used to supabase database setup and really interesting way supabase can be used in backend and database.
-- Learn how to deploy using vercel for frontend and render for backend, and running them simultaniously for a fully deployed application.
-
-### Assumptions
-
-- This is an internal assessment prototype rather than a production deployment.
-- Authentication is mocked: the UI displays role-specific portals and a “Mock User,” but it does not authenticate users or enforce database roles.
-- WhatsApp notifications are deep-links that require user interaction that is not automated
 
 ## Limitations
 
@@ -219,16 +207,6 @@ The code supports postpone/reschedule detection by matching those words in `orde
 - The frontend currently hard-codes the deployed Render URLs for KPI and AI calls, so local frontend development will use that deployed backend unless the source is changed.
 - Supabase bucket access relies on public URLs in the current implementation; production storage policies and access controls would need further design.
 - A Render service can experience cold starts depending on its hosting plan.
-
-## Future Improvements
-
-- Add Supabase Authentication, row-level security, and genuine role-based access control.
-- Support post-creation assignment changes, rescheduling, manager approval, and a complete closure workflow.
-- Integrate WhatsApp Business API messaging and a tracked feedback experience.
-- Add KPI date ranges, filtering, richer activity capture, and interactive charts.
-- Extend AI insights with carefully designed additional retrieval operations, technician workload planning, and manager-approved summaries.
-- Add automated detection for unusual charges, payment discrepancies, missing evidence, and overdue work with human review.
-- Improve user-facing error states, upload recovery, notifications, and observability.
 
 ## Running Locally
 
@@ -303,9 +281,3 @@ The FastAPI server runs locally at `http://127.0.0.1:8000`; interactive document
 | `GET` | `/api/test-order-activity` | Returns the latest 20 order-activity records for inspection. |
 | `POST` | `/api/ai/query` | Accepts `{ "question": "..." }`, selects a supported controlled operation, and returns a grounded natural-language answer. |
 
-## Self-Assessment
-
-- **Easiest:** Building the role-specific React screens and connecting standard order data to Supabase was the most direct part of the workflow.
-- **Hardest:** Designing the cross-role workflow, keeping completion evidence consistent with relational records, and constraining AI answers to retrieved operational data required the most care.
-- **For production:** I would prioritise authentication and RLS, a formal activity/rescheduling model, resilient upload and notification handling, and stronger operational monitoring.
-- **Use of AI tools during development:** AI tools were used as development assistance for understanding concepts, debugging, reviewing implementation approaches, and improving code and documentation. The project architecture, integration decisions, and final implementation were reviewed and tested by the developer.
